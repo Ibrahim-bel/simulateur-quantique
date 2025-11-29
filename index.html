@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulateur Quantique Interactif</title>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #60a5fa;
+            margin-bottom: 10px;
+        }
+        p.lead {
+            text-align: center;
+            color: #94a3b8;
+            margin-top: 0;
+        }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button.reset { background-color: #ef4444; color: white; }
+        button.hadamard { background-color: #3b82f6; color: white; }
+        button.x { background-color: #8b5cf6; color: white; }
+        button.z { background-color: #ec4899; color: white; }
+        button.cnot { background-color: #f59e0b; color: white; }
+        .layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .card {
+            background-color: #1e293b;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #334155;
+        }
+        #history {
+            white-space: pre-line;
+            font-size: 14px;
+            color: #a1a1aa;
+        }
+    </style>
+</head>
+<body>
+    <h1>⚛️ Simulateur Quantique Interactif</h1>
+    <p class="lead">Explorez les portes quantiques de base et visualisez l'état du système</p>
+    <div class="controls">
+        <button class="reset" onclick="resetState()">🔄 Réinitialiser</button>
+        <button class="hadamard" onclick="applyGate('hadamard', 0)">🌀 Hadamard Q0</button>
+        <button class="x" onclick="applyGate('pauli_x', 0)">↔️ Pauli‑X Q0</button>
+        <button class="z" onclick="applyGate('pauli_z', 0)">🎭 Pauli‑Z Q0</button>
+        <button class="cnot" onclick="applyGate('cnot', 0, 1)">🔗 CNOT (0→1)</button>
+    </div>
+    <div class="layout">
+        <div class="card">
+            <h3>Distribution des probabilités</h3>
+            <div id="probChart" style="width:100%;height:300px;"></div>
+        </div>
+        <div class="card">
+            <h3>Informations sur l'état</h3>
+            <p>Bloch (Q0): <span id="bloch"></span></p>
+            <p>Entropie d'intrication: <span id="entropy"></span></p>
+        </div>
+    </div>
+    <div class="card" style="margin-top:20px;">
+        <h3>Historique des opérations</h3>
+        <div id="history"></div>
+    </div>
+    <!-- Plotly library loaded locally. Ensure plotly.min.js is in the same folder -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script>
+        // Complex number helpers
+        function Complex(re, im) {
+            return { re: re, im: im };
+        }
+        function c_add(a, b) {
+            return { re: a.re + b.re, im: a.im + b.im };
+        }
+        function c_sub(a, b) {
+            return { re: a.re - b.re, im: a.im - b.im };
+        }
+        function c_mul(a, b) {
+            return { re: a.re * b.re - a.im * b.im, im: a.re * b.im + a.im * b.re };
+        }
+        function c_conj(a) {
+            return { re: a.re, im: -a.im };
+        }
+        function c_abs2(a) {
+            return a.re * a.re + a.im * a.im;
+        }
+
+        // Global state: 2 qubits => 4 basis states
+        var state = [ Complex(1, 0), Complex(0, 0), Complex(0, 0), Complex(0, 0) ];
+        var history = [ "État initial |00⟩" ];
+
+        function resetState() {
+            state = [ Complex(1, 0), Complex(0, 0), Complex(0, 0), Complex(0, 0) ];
+            history = [ "État initial |00⟩" ];
+            updateUI();
+        }
+
+        // Construct full 4x4 gate for single qubit gate
+        function buildFullGate(gate, qubit) {
+            // gate is 2x2 array of Complex
+            var full = [];
+            for (var r = 0; r < 4; r++) {
+                full[r] = [];
+                for (var c = 0; c < 4; c++) {
+                    full[r][c] = Complex(0, 0);
+                }
+            }
+            if (qubit === 0) {
+                // Apply to MSB
+                for (var j0 = 0; j0 < 2; j0++) {
+                    for (var k0 = 0; k0 < 2; k0++) {
+                        var g = gate[j0][k0];
+                        for (var b1 = 0; b1 < 2; b1++) {
+                            var r = j0 * 2 + b1;
+                            var c = k0 * 2 + b1;
+                            full[r][c] = g;
+                        }
+                    }
+                }
+            } else {
+                // Apply to LSB
+                for (var j1 = 0; j1 < 2; j1++) {
+                    for (var k1 = 0; k1 < 2; k1++) {
+                        var g = gate[j1][k1];
+                        for (var b0 = 0; b0 < 2; b0++) {
+                            var r = b0 * 2 + j1;
+                            var c = b0 * 2 + k1;
+                            full[r][c] = g;
+                        }
+                    }
+                }
+            }
+            return full;
+        }
+
+        function applySingleGate(gate, qubit, label) {
+            var full = buildFullGate(gate, qubit);
+            var newState = [ Complex(0, 0), Complex(0, 0), Complex(0, 0), Complex(0, 0) ];
+            for (var r = 0; r < 4; r++) {
+                var sum = Complex(0, 0);
+                for (var c = 0; c < 4; c++) {
+                    var g = full[r][c];
+                    sum = c_add(sum, c_mul(g, state[c]));
+                }
+                newState[r] = sum;
+            }
+            state = newState;
+            history.push(label);
+            updateUI();
+        }
+
+        function applyCNOT(control, target) {
+            var newState = [ Complex(0, 0), Complex(0, 0), Complex(0, 0), Complex(0, 0) ];
+            for (var i = 0; i < 4; i++) {
+                var amp = state[i];
+                var controlBit = (i >> (1 - control)) & 1;
+                var j = i;
+                if (controlBit === 1) {
+                    j = i ^ (1 << (1 - target));
+                }
+                newState[j] = c_add(newState[j], amp);
+            }
+            state = newState;
+            history.push(`CNOT (contrôle=${control}, cible=${target})`);
+            updateUI();
+        }
+
+        function applyGate(name, q0, q1) {
+            var sqrt2inv = 1 / Math.sqrt(2);
+            if (name === 'hadamard') {
+                var H = [
+                    [ Complex(sqrt2inv, 0), Complex(sqrt2inv, 0) ],
+                    [ Complex(sqrt2inv, 0), Complex(-sqrt2inv, 0) ]
+                ];
+                applySingleGate(H, q0, `Hadamard sur qubit ${q0}`);
+            } else if (name === 'pauli_x') {
+                var X = [
+                    [ Complex(0, 0), Complex(1, 0) ],
+                    [ Complex(1, 0), Complex(0, 0) ]
+                ];
+                applySingleGate(X, q0, `Pauli-X sur qubit ${q0}`);
+            } else if (name === 'pauli_z') {
+                var Z = [
+                    [ Complex(1, 0), Complex(0, 0) ],
+                    [ Complex(0, 0), Complex(-1, 0) ]
+                ];
+                applySingleGate(Z, q0, `Pauli-Z sur qubit ${q0}`);
+            } else if (name === 'cnot') {
+                applyCNOT(q0, q1);
+            }
+        }
+
+        function getProbabilities() {
+            return state.map(c_abs2);
+        }
+
+        function getBloch() {
+            // Compute reduced density matrix of qubit 0
+            var sm = [ [ state[0], state[1] ], [ state[2], state[3] ] ];
+            var rho = [ [ Complex(0, 0), Complex(0, 0) ], [ Complex(0, 0), Complex(0, 0) ] ];
+            for (var i = 0; i < 2; i++) {
+                for (var j = 0; j < 2; j++) {
+                    var sum = Complex(0, 0);
+                    for (var k = 0; k < 2; k++) {
+                        sum = c_add(sum, c_mul(sm[i][k], c_conj(sm[j][k])));
+                    }
+                    rho[i][j] = sum;
+                }
+            }
+            // Pauli matrices
+            var sigma_x = [ [ Complex(0, 0), Complex(1, 0) ], [ Complex(1, 0), Complex(0, 0) ] ];
+            var sigma_y = [ [ Complex(0, 0), Complex(0, -1) ], [ Complex(0, 1), Complex(0, 0) ] ];
+            var sigma_z = [ [ Complex(1, 0), Complex(0, 0) ], [ Complex(0, 0), Complex(-1, 0) ] ];
+            function traceProduct(a, b) {
+                // compute trace(a @ b)
+                var m = [ [ Complex(0, 0), Complex(0, 0) ], [ Complex(0, 0), Complex(0, 0) ] ];
+                for (var r = 0; r < 2; r++) {
+                    for (var c = 0; c < 2; c++) {
+                        var sum = Complex(0, 0);
+                        for (var k = 0; k < 2; k++) {
+                            sum = c_add(sum, c_mul(a[r][k], b[k][c]));
+                        }
+                        m[r][c] = sum;
+                    }
+                }
+                var diag = c_add(m[0][0], m[1][1]);
+                return diag;
+            }
+            var x = traceProduct(rho, sigma_x).re;
+            var y = traceProduct(rho, sigma_y).re;
+            var z = traceProduct(rho, sigma_z).re;
+            return { x: x, y: y, z: z };
+        }
+
+        function getEntanglement() {
+            // Compute reduced density matrix for qubit 0 as above
+            var sm = [ [ state[0], state[1] ], [ state[2], state[3] ] ];
+            var rho = [ [ Complex(0, 0), Complex(0, 0) ], [ Complex(0, 0), Complex(0, 0) ] ];
+            for (var i = 0; i < 2; i++) {
+                for (var j = 0; j < 2; j++) {
+                    var sum = Complex(0, 0);
+                    for (var k = 0; k < 2; k++) {
+                        sum = c_add(sum, c_mul(sm[i][k], c_conj(sm[j][k])));
+                    }
+                    rho[i][j] = sum;
+                }
+            }
+            // Extract real parts of diagonal and magnitude of off-diagonal
+            var a = rho[0][0].re;
+            var d = rho[1][1].re;
+            var off = rho[0][1];
+            var off_abs = Math.sqrt(off.re * off.re + off.im * off.im);
+            var sqrtTerm = Math.sqrt((a - d) * (a - d) + 4 * off_abs * off_abs);
+            var lambda1 = (a + d + sqrtTerm) / 2;
+            var lambda2 = (a + d - sqrtTerm) / 2;
+            var entropy = 0;
+            var eps = 1e-12;
+            if (lambda1 > eps) entropy -= lambda1 * Math.log2(lambda1);
+            if (lambda2 > eps) entropy -= lambda2 * Math.log2(lambda2);
+            return entropy;
+        }
+
+        function updateUI() {
+            var probs = getProbabilities();
+            var states = [ '00', '01', '10', '11' ];
+            var trace = {
+                x: states,
+                y: probs,
+                type: 'bar',
+                marker: { color: probs, colorscale: 'Viridis' }
+            };
+            var layout = {
+                margin: { t: 30, l: 40, r: 20, b: 40 },
+                xaxis: { title: 'États' },
+                yaxis: { title: 'Probabilité' },
+                paper_bgcolor: '#1e293b',
+                plot_bgcolor: '#1e293b',
+                font: { color: '#e2e8f0' }
+            };
+            Plotly.newPlot('probChart', [ trace ], layout, { responsive: true, displayModeBar: false });
+            var bloch = getBloch();
+            document.getElementById('bloch').textContent = `(${bloch.x.toFixed(3)}, ${bloch.y.toFixed(3)}, ${bloch.z.toFixed(3)})`;
+            var entropy = getEntanglement();
+            document.getElementById('entropy').textContent = entropy.toFixed(3);
+            document.getElementById('history').textContent = history.join('\n');
+        }
+
+        // Initialize UI on load
+        document.addEventListener('DOMContentLoaded', function() {
+            updateUI();
+        });
+    </script>
+</body>
+</html>
