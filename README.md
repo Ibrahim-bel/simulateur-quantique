@@ -267,10 +267,7 @@ Pour toute question : [GitHub Issues](https://github.com/Ibrahim-bel/simulateur-
 
 ## 🌐 Démo en ligne
 
-Application déployée sur Render : [Lien vers l'application](https://votre-app.onrender.com)
-
-*(Remplacer par l'URL réelle après déploiement)*
-
+Application déployée sur Render : https://simulateur-quantique.onrender.com/
 ---
 
 **Version** : 1.0.0  
