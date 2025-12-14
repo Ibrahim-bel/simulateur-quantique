@@ -43,7 +43,9 @@ class QuantumSimulator:
         gate = np.eye(self.dim, dtype=complex)
         
         for i in range(self.dim):
+            # Vérifier si le bit de contrôle est à 1
             if (i >> (self.n_qubits - 1 - control)) & 1:
+                # Inverser le bit cible
                 j = i ^ (1 << (self.n_qubits - 1 - target))
                 gate[i, i] = 0
                 gate[i, j] = 1
@@ -54,14 +56,14 @@ class QuantumSimulator:
         
     def apply_pauli_x(self, qubit):
         """Applique une porte Pauli-X (NOT quantique)"""
-        X = np.array([[0, 1], [1, 0]])
+        X = np.array([[0, 1], [1, 0]], dtype=complex)
         self._apply_single_qubit_gate(X, qubit)
         self.operations.append(f"Pauli-X sur qubit {qubit}")
         self.history.append(self.state.copy())
         
     def apply_pauli_z(self, qubit):
         """Applique une porte Pauli-Z (phase flip)"""
-        Z = np.array([[1, 0], [0, -1]])
+        Z = np.array([[1, 0], [0, -1]], dtype=complex)
         self._apply_single_qubit_gate(Z, qubit)
         self.operations.append(f"Pauli-Z sur qubit {qubit}")
         self.history.append(self.state.copy())
@@ -71,7 +73,7 @@ class QuantumSimulator:
         Rx = np.array([
             [np.cos(theta/2), -1j*np.sin(theta/2)],
             [-1j*np.sin(theta/2), np.cos(theta/2)]
-        ])
+        ], dtype=complex)
         self._apply_single_qubit_gate(Rx, qubit)
         self.operations.append(f"Rx({theta:.2f}) sur qubit {qubit}")
         self.history.append(self.state.copy())
@@ -81,7 +83,7 @@ class QuantumSimulator:
         Rz = np.array([
             [np.exp(-1j*theta/2), 0],
             [0, np.exp(1j*theta/2)]
-        ])
+        ], dtype=complex)
         self._apply_single_qubit_gate(Rz, qubit)
         self.operations.append(f"Rz({theta:.2f}) sur qubit {qubit}")
         self.history.append(self.state.copy())
@@ -118,19 +120,30 @@ class QuantumSimulator:
         return counts
     
     def get_bloch_coordinates(self, qubit=0):
-        """Calcule les coordonnées de Bloch pour un qubit (si non intriqué)"""
-        # Trace partiel pour obtenir la matrice densité réduite
+        """Calcule les coordonnées de Bloch pour un qubit (trace partiel correct)"""
+        # Matrice densité du système complet
+        rho_full = np.outer(self.state, np.conj(self.state))
+        
         if self.n_qubits == 1:
-            rho = np.outer(self.state, np.conj(self.state))
+            rho = rho_full
         else:
-            # Simplifié: assume qubit 0
-            state_matrix = self.state.reshape(2, 2)
-            rho = state_matrix @ state_matrix.conj().T
+            # Trace partiel pour obtenir la matrice densité réduite du qubit spécifié
+            # Réorganiser le vecteur d'état en tenseur
+            if qubit == 0:
+                # Pour le qubit 0, on trace sur tous les autres qubits
+                state_reshaped = self.state.reshape(2, 2**(self.n_qubits-1))
+                rho = state_reshaped @ state_reshaped.conj().T
+            else:
+                # Pour le qubit 1 (dans un système 2-qubits)
+                state_reshaped = self.state.reshape(2, 2)
+                rho = np.zeros((2, 2), dtype=complex)
+                for i in range(2):
+                    rho += np.outer(state_reshaped[i, :], state_reshaped[i, :].conj())
             
         # Coordonnées de Bloch: (x, y, z) = (Tr(ρσx), Tr(ρσy), Tr(ρσz))
-        sigma_x = np.array([[0, 1], [1, 0]])
-        sigma_y = np.array([[0, -1j], [1j, 0]])
-        sigma_z = np.array([[1, 0], [0, -1]])
+        sigma_x = np.array([[0, 1], [1, 0]], dtype=complex)
+        sigma_y = np.array([[0, -1j], [1j, 0]], dtype=complex)
+        sigma_z = np.array([[1, 0], [0, -1]], dtype=complex)
         
         x = np.real(np.trace(rho @ sigma_x))
         y = np.real(np.trace(rho @ sigma_y))
@@ -143,7 +156,7 @@ class QuantumSimulator:
         if self.n_qubits != 2:
             return 0
         
-        # Matrice densité réduite du premier qubit
+        # Matrice densité réduite du premier qubit (trace partiel correct)
         state_matrix = self.state.reshape(2, 2)
         rho_A = state_matrix @ state_matrix.conj().T
         
@@ -152,8 +165,35 @@ class QuantumSimulator:
         eigenvalues = eigenvalues[eigenvalues > 1e-10]  # Éviter log(0)
         
         # Entropie de von Neumann
-        entropy = -np.sum(eigenvalues * np.log2(eigenvalues))
+        entropy = -np.sum(eigenvalues * np.log2(eigenvalues + 1e-15))
         return entropy
+
+
+# ==========================================
+# FONCTIONS UTILITAIRES
+# ==========================================
+
+def format_complex(z, precision=3):
+    """Formate un nombre complexe de manière lisible"""
+    real_part = z.real
+    imag_part = z.imag
+    
+    # Si essentiellement réel
+    if abs(imag_part) < 10**(-precision):
+        return f'{real_part:.{precision}f}'
+    
+    # Si essentiellement imaginaire
+    if abs(real_part) < 10**(-precision):
+        if imag_part >= 0:
+            return f'{imag_part:.{precision}f}i'
+        else:
+            return f'{imag_part:.{precision}f}i'
+    
+    # Cas général
+    if imag_part >= 0:
+        return f'{real_part:.{precision}f}+{imag_part:.{precision}f}i'
+    else:
+        return f'{real_part:.{precision}f}{imag_part:.{precision}f}i'
 
 
 # ==========================================
@@ -166,10 +206,10 @@ def create_state_visualization(simulator):
     amplitudes = simulator.get_state_vector()
     probabilities = simulator.get_probabilities()
     
-    # Graphique en barres 3D montrant amplitude et phase
+    # Graphique en barres montrant les probabilités
     fig = go.Figure()
     
-    # Barres pour les amplitudes
+    # Barres pour les probabilités
     fig.add_trace(go.Bar(
         x=states,
         y=probabilities,
@@ -182,6 +222,8 @@ def create_state_visualization(simulator):
         ),
         text=[f'{p:.3f}' for p in probabilities],
         textposition='outside',
+        hovertemplate='<b>État |%{x}⟩</b><br>Probabilité: %{y:.4f}<br>Amplitude: ' + 
+                      '<br>'.join([format_complex(amp) for amp in amplitudes]) + '<extra></extra>',
     ))
     
     fig.update_layout(
@@ -324,6 +366,12 @@ def create_circuit_diagram(operations):
         elif 'Pauli-Z' in op:
             qubit = int(op.split()[-1])
             gate_positions.append((idx, qubit, 'Z', 'purple'))
+        elif 'Rx' in op:
+            qubit = int(op.split()[-1])
+            gate_positions.append((idx, qubit, 'Rx', 'magenta'))
+        elif 'Rz' in op:
+            qubit = int(op.split()[-1])
+            gate_positions.append((idx, qubit, 'Rz', 'lime'))
     
     # Dessiner les portes
     for x, y, symbol, color in gate_positions:
@@ -356,6 +404,16 @@ def create_circuit_diagram(operations):
 
 def create_measurement_histogram(counts):
     """Crée un histogramme des résultats de mesure"""
+    if not counts:
+        # Retourner un graphique vide si pas de mesures
+        fig = go.Figure()
+        fig.update_layout(
+            title="Résultats de Mesure (1000 shots)",
+            template="plotly_dark",
+            height=400,
+        )
+        return fig
+    
     states = list(counts.keys())
     values = list(counts.values())
     
@@ -937,7 +995,7 @@ app.layout = html.Div(
                 'borderTop': '1px solid #334155',
             },
             children=[
-                'Simulateur quantique éducatif | Basé sur les principes de Qiskit et IBM Quantum'
+                'Simulateur quantique éducatif | Basé sur les principes de Qiskit et IBM Quantum | Version corrigée 2024'
             ]
         ),
     ]
@@ -984,12 +1042,14 @@ def update_superposition_tab(n_reset, n_h, n_x, n_z):
             style={'display': 'grid', 'gridTemplateColumns': '1fr 1fr', 'gap': '15px'},
             children=[
                 html.Div([
-                    html.H4('Vecteur d\'État', style={'color': '#60a5fa', 'fontSize': '16px'}),
+                    html.H4('Vecteur d\'État (avec phases complexes)', style={'color': '#60a5fa', 'fontSize': '16px'}),
                     html.Div(
                         style={'fontFamily': 'monospace', 'color': '#e2e8f0', 'fontSize': '14px'},
                         children=[
-                            html.P(f'|ψ⟩ = {state_vector[0].real:.3f}|00⟩ + {state_vector[1].real:.3f}|01⟩ +'),
-                            html.P(f'      {state_vector[2].real:.3f}|10⟩ + {state_vector[3].real:.3f}|11⟩'),
+                            html.P(f'|ψ⟩ = ({format_complex(state_vector[0])})|00⟩ +'),
+                            html.P(f'      ({format_complex(state_vector[1])})|01⟩ +'),
+                            html.P(f'      ({format_complex(state_vector[2])})|10⟩ +'),
+                            html.P(f'      ({format_complex(state_vector[3])})|11⟩'),
                         ]
                     ),
                 ]),
@@ -1014,6 +1074,8 @@ def update_superposition_tab(n_reset, n_h, n_x, n_z):
                       style={'color': '#22d3ee', 'margin': '5px 0'}),
                 html.P(f'📜 Dernière opération: {sim.operations[-1]}', 
                       style={'color': '#a78bfa', 'margin': '5px 0'}),
+                html.P(f'✅ Normalisation: Σ|ψᵢ|² = {np.sum(probs):.6f} (doit être = 1.0)', 
+                      style={'color': '#10b981', 'margin': '5px 0'}),
             ]
         ),
     ])
@@ -1118,4 +1180,16 @@ def update_entanglement_tab(n_reset, n_h, n_cnot):
 
 
 if __name__ == '__main__':
+    print("=" * 70)
+    print("🚀 SIMULATEUR QUANTIQUE INTERACTIF - VERSION CORRIGÉE")
+    print("=" * 70)
+    print("\n✅ Corrections appliquées:")
+    print("  • Calcul de la sphère de Bloch avec trace partiel correct")
+    print("  • Affichage des amplitudes complexes (phases visibles)")
+    print("  • Gestion améliorée des nombres complexes")
+    print("  • Vérification de normalisation ajoutée")
+    print("\n🌐 Lancement du serveur Dash sur http://localhost:8050")
+    print("=" * 70)
+    print()
+    
     app.run(debug=True, port=8050)
