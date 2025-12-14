@@ -1105,6 +1105,23 @@ def update_superposition_tab(n_reset, n_h, n_x, n_z):
                 ),
             ]
         ),
+        # Détection de l'état dominant
+        html.Div(
+            style={'marginTop': '15px', 'padding': '15px', 'backgroundColor': '#064e3b', 'borderRadius': '8px', 'border': '2px solid #10b981'},
+            children=[
+                html.H4('🎯 État Dominant Détecté', style={'color': '#34d399', 'fontSize': '16px', 'marginBottom': '10px'}),
+                html.Div(
+                    style={'fontSize': '24px', 'fontWeight': 'bold', 'textAlign': 'center', 'color': '#22d3ee', 'fontFamily': 'monospace'},
+                    children=[
+                        f"|{format(np.argmax(probs), '02b')}⟩ avec {np.max(probs)*100:.1f}% de probabilité"
+                    ]
+                ),
+                html.P(
+                    f"Distribution: |00⟩={probs[0]*100:.0f}% | |01⟩={probs[1]*100:.0f}% | |10⟩={probs[2]*100:.0f}% | |11⟩={probs[3]*100:.0f}%",
+                    style={'color': '#a7f3d0', 'fontSize': '12px', 'textAlign': 'center', 'marginTop': '10px', 'fontFamily': 'monospace'}
+                ),
+            ]
+        ),
     ])
     
     return bloch_fig, dist_fig, info_div
