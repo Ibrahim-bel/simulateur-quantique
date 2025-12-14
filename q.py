@@ -1024,9 +1024,9 @@ def update_superposition_tab(n_reset, n_h, n_x, n_z):
     elif ctx.triggered[0]['prop_id'] == 'btn-hadamard-q0.n_clicks' and n_h > 0:
         sim.apply_hadamard(0)
     elif ctx.triggered[0]['prop_id'] == 'btn-pauli-x.n_clicks' and n_x > 0:
-        sim.apply_pauli_x(0)
+        sim.apply_pauli_x(0)  # Applique X sur qubit 0
     elif ctx.triggered[0]['prop_id'] == 'btn-pauli-z.n_clicks' and n_z > 0:
-        sim.apply_pauli_z(0)
+        sim.apply_pauli_z(0)  # Applique Z sur qubit 0
     
     # Créer les visualisations
     bloch_fig = create_bloch_sphere(sim, qubit=0)
@@ -1035,6 +1035,9 @@ def update_superposition_tab(n_reset, n_h, n_x, n_z):
     # Informations sur l'état
     state_vector = sim.get_state_vector()
     probs = sim.get_probabilities()
+    
+    # Calculer les coordonnées de Bloch pour afficher l'effet
+    x, y, z = sim.get_bloch_coordinates(0)
     
     info_div = html.Div([
         html.H3('📊 Informations sur l\'État Quantique', style={'color': '#34d399', 'marginBottom': '15px'}),
@@ -1050,6 +1053,13 @@ def update_superposition_tab(n_reset, n_h, n_x, n_z):
                             html.P(f'      ({format_complex(state_vector[1])})|01⟩ +'),
                             html.P(f'      ({format_complex(state_vector[2])})|10⟩ +'),
                             html.P(f'      ({format_complex(state_vector[3])})|11⟩'),
+                        ]
+                    ),
+                    html.Div(
+                        style={'marginTop': '10px', 'padding': '10px', 'backgroundColor': '#0f172a', 'borderRadius': '5px'},
+                        children=[
+                            html.P('Coordonnées Bloch (Qubit 0):', style={'color': '#22d3ee', 'fontSize': '12px', 'margin': '0 0 5px 0'}),
+                            html.P(f'x={x:.3f}, y={y:.3f}, z={z:.3f}', style={'color': '#fbbf24', 'fontSize': '12px', 'margin': '0', 'fontFamily': 'monospace'}),
                         ]
                     ),
                 ]),
@@ -1076,6 +1086,23 @@ def update_superposition_tab(n_reset, n_h, n_x, n_z):
                       style={'color': '#a78bfa', 'margin': '5px 0'}),
                 html.P(f'✅ Normalisation: Σ|ψᵢ|² = {np.sum(probs):.6f} (doit être = 1.0)', 
                       style={'color': '#10b981', 'margin': '5px 0'}),
+            ]
+        ),
+        # Explication des effets des portes
+        html.Div(
+            style={'marginTop': '15px', 'padding': '15px', 'backgroundColor': '#1e293b', 'borderRadius': '8px', 'border': '2px solid #f59e0b'},
+            children=[
+                html.H4('💡 Effet des Portes sur l\'État Actuel', style={'color': '#fbbf24', 'fontSize': '16px', 'marginBottom': '10px'}),
+                html.Div(
+                    style={'color': '#e2e8f0', 'fontSize': '14px', 'lineHeight': '1.6'},
+                    children=[
+                        html.P('🌀 Hadamard: Crée une superposition égale (|0⟩ + |1⟩)/√2'),
+                        html.P('↔️ Pauli-X: Inverse |0⟩ ↔ |1⟩ (équivalent au NOT classique)'),
+                        html.P('🎭 Pauli-Z: Ajoute une phase -1 à |1⟩ (|0⟩ reste, |1⟩ → -|1⟩)'),
+                        html.P('📌 Conseil: Appliquez d\'abord Hadamard pour voir les effets de X et Z sur une superposition!', 
+                              style={'color': '#22d3ee', 'fontWeight': 'bold', 'marginTop': '10px'}),
+                    ]
+                ),
             ]
         ),
     ])
