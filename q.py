@@ -995,7 +995,7 @@ app.layout = html.Div(
                 'borderTop': '1px solid #334155',
             },
             children=[
-                'Simulateur quantique éducatif | Basé sur les principes de Qiskit et IBM Quantum | Version corrigée 2024'
+                'Simulateur quantique éducatif | Basé sur les principes de Qiskit et IBM Quantum | IQ01 | BELAYACHI Ibrahim, FADOUACHE Kenza, MOUAYED Dina'
             ]
         ),
     ]
